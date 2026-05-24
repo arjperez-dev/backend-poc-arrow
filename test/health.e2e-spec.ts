@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
+import { HealthController } from '../src/interfaces/http/health/health.controller';
 import { HttpExceptionFilter } from '../src/interfaces/http/filters/http-exception.filter';
 import { LoggingPerformanceInterceptor } from '../src/interfaces/http/interceptors/logging-performance.interceptor';
 
@@ -10,7 +10,7 @@ describe('Health endpoint', () => {
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
+      controllers: [HealthController],
     }).compile();
 
     app = moduleFixture.createNestApplication();
