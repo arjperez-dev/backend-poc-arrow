@@ -14,23 +14,7 @@ REST API for the **Nodus** puzzle game client. Server-side context only — see 
 Nodus Backend provides the HTTP services that support the Nodus mobile game: user registration and authentication, a catalog of graph-based levels, player progress persistence and synchronisation, and per-level leaderboards. The backend stores and serves data; **it does not run gameplay logic** — that responsibility belongs entirely to the Flutter client.
 
 ## Tech Stack
-## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js · TypeScript |
-| Framework | NestJS 11 (`@nestjs/*`, `@nestjs/jwt`) — Express under the hood |
-| ORM / DB | Prisma 6 · PostgreSQL 17 |
-| Auth | JWT bearer tokens · bcryptjs password hashing |
-| Docs | Swagger / OpenAPI (`@nestjs/swagger`) at `/api/docs` |
-| Testing | Jest · Supertest |
-| DevOps | Docker · Docker Compose |
-
----
-
-## Architecture — Clean Architecture
-
-The project follows a **layered / ports-and-adapters (hexagonal)** architecture: domain rules are framework-free, the application layer defines ports (interfaces) that infrastructure adapters implement, and interfaces (HTTP controllers) are the only entry point.
 | Layer | Technology |
 |---|---|
 | Runtime | Node.js · TypeScript |
@@ -50,16 +34,10 @@ The project follows a **layered / ports-and-adapters (hexagonal)** architecture:
 ```text
 src/
   domain/            entities, value objects, pure rules (no framework imports)
-  domain/            entities, value objects, pure rules (no framework imports)
   application/
     ports/            abstract interfaces implemented by infrastructure
     <feature>/        use cases (orchestrate domain + ports)
-    ports/            abstract interfaces implemented by infrastructure
-    <feature>/        use cases (orchestrate domain + ports)
   infrastructure/
-    database/         Prisma client / module
-    repositories/     port implementations (Prisma adapters)
-    security/         hashing (bcrypt), JWT signing
     database/         Prisma client / module
     repositories/     port implementations (Prisma adapters)
     security/         hashing (bcrypt), JWT signing
@@ -68,8 +46,6 @@ src/
       <feature>/
         <feature>.controller.ts
         dto/
-      filters/        global exception filter
-      interceptors/   logging & performance interceptor
       filters/        global exception filter
       interceptors/   logging & performance interceptor
       health/
@@ -85,10 +61,10 @@ test/
 ---
 
 ### Class Diagram
-![Class Diagram](./docs/images/backend_class_diagram.svg)
+![Class Diagram](./docs/backend_class_diagram.svg)
 
 ### Clean Architecture Layers Diagram
-![Clean Architecture](./docs/images/backend_clean_architecture.svg)
+![Clean Architecture](./docs/backend_clean_architecture.svg)
 
 **[View diagrams in Lucidchart](https://lucid.app/lucidchart/5c09fbb7-74be-4dc2-89c5-af638b2b2b71/edit?invitationId=inv_7c5f886f-d720-4be1-86f9-55d565e84361&page=p1#)**
 
@@ -203,22 +179,7 @@ git clone https://github.com/arjperez-dev/backend-poc-arrow.git
 cd backend-poc-arrow
 
 # 2. Install dependencies
-# 1. Clone the repository
-git clone https://github.com/arjperez-dev/backend-poc-arrow.git
-cd backend-poc-arrow
-
-# 2. Install dependencies
 npm install
-
-# 3. Copy environment template
-cp .env.example .env
-# Edit .env with your values (see Environment Variables below)
-
-# 4. Start PostgreSQL via Docker and the API
-docker compose up --build
-
-# 5. Run migrations and seed (in a separate terminal if needed)
-npx prisma migrate dev
 
 # 3. Copy environment template
 cp .env.example .env
@@ -233,7 +194,6 @@ npm run prisma:seed
 ```
 
 ### Run
-### Run
 
 ```powershell
 npm run start:dev   # watch mode (hot reload)
@@ -242,28 +202,7 @@ npm run test:e2e    # end-to-end tests
 ```
 
 > **Note:** There is no `npm run dev` — the dev script is `start:dev`.
-> **Note:** There is no `npm run dev` — the dev script is `start:dev`.
 
----
-
-## Environment Variables
-
-Create a `.env` file from `.env.example`:
-
-| Variable | Description | Example |
-|---|---|---|
-| `PORT` | Server port | `3000` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:postgres@postgres:5432/arrow_poc?schema=public` |
-| `JWT_SECRET` | Secret key for JWT signing | `change-me-in-local-env` |
-| `CORS_ORIGIN` | Allowed CORS origin | `http://localhost:5173` |
-| `NODE_ENV` | Environment mode | `development` |
-| `DATABASE_URL_TEST` | Test database URL | `postgresql://...` |
-| `ADMIN_EMAIL` | Optional admin seed email | `admin@example.com` |
-| `ADMIN_PASSWORD` | Optional admin seed password | `change-me-admin-password` |
-
----
-
-## Seed Data
 ---
 
 ## Environment Variables
