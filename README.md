@@ -66,7 +66,7 @@ test/
 ### Architecture Diagram
 ![ports-and-adapters](./docs/backend_clean_architecture.svg)
 
-**[View diagrams in Lucidchart](https://lucid.app/lucidchart/5c09fbb7-74be-4dc2-89c5-af638b2b2b71/edit?invitationId=inv_7c5f886f-d720-4be1-86f9-55d565e84361&page=p1#)**
+**[View diagrams in Lucidchart](https://lucid.app/lucidchart/91a6320b-13f7-4069-8927-291808d3df97/edit?viewport_loc=-3741%2C-3586%2C21029%2C11282%2Cp1&invitationId=inv_214f2076-e9ff-4c87-8d51-6b451a2b95e5)**
 
 ---
 
