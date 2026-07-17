@@ -27,7 +27,7 @@ Nodus Backend provides the HTTP services that support the Nodus mobile game: use
 
 ---
 
-## Architecture — Clean Architecture
+## Architecture 
 
 The project follows a **layered / ports-and-adapters (hexagonal)** architecture: domain rules are framework-free, the application layer defines ports (interfaces) that infrastructure adapters implement, and interfaces (HTTP controllers) are the only entry point.
 
@@ -63,10 +63,10 @@ test/
 ### Class Diagram
 ![Class Diagram](./docs/backend_class_diagram.svg)
 
-### Clean Architecture Layers Diagram
-![Clean Architecture](./docs/backend_clean_architecture.svg)
+### Architecture Diagram
+![ports-and-adapters](./docs/backend_clean_architecture.svg)
 
-**[View diagrams in Lucidchart](https://lucid.app/lucidchart/5c09fbb7-74be-4dc2-89c5-af638b2b2b71/edit?invitationId=inv_7c5f886f-d720-4be1-86f9-55d565e84361&page=p1#)**
+**[View diagrams in Lucidchart](https://lucid.app/lucidchart/91a6320b-13f7-4069-8927-291808d3df97/edit?viewport_loc=-3741%2C-3586%2C21029%2C11282%2Cp1&invitationId=inv_214f2076-e9ff-4c87-8d51-6b451a2b95e5)**
 
 ---
 
@@ -174,7 +174,7 @@ Interactive Swagger docs available at **`/api/docs`** when the server is running
 
 ### Prerequisites
 
-- **Node.js** ≥ 18
+- **Node.js** ≥ 20 (the Docker image uses Node 24; a host install is only needed for the no-Docker workflow below)
 - **Docker** and **Docker Compose** (for PostgreSQL)
 - **npm** (comes with Node.js)
 
@@ -192,23 +192,28 @@ npm install
 cp .env.example .env
 # Edit .env with your values (see Environment Variables below)
 
-# 4. Start PostgreSQL via Docker and the API
+# 4. Start PostgreSQL and the API via Docker
 docker compose up --build
-
-# 5. Run migrations and seed (in a separate terminal if needed)
-npx prisma migrate dev
-npm run prisma:seed
 ```
 
-### Run
+The `api` container's entrypoint already runs `prisma migrate deploy`, then the seed script, then starts the server on every `docker compose up` — no separate migrate/seed step is needed for the Docker path.
+
+> **`--build` vs plain `up`:** `--build` only affects services with a `build:` key in `docker-compose.yml` — here that's just `api` (built from `Dockerfile`); `postgres` is pulled as-is from `postgres:17-alpine`, so `--build` is a no-op for it. Use `docker compose up --build` on the first run and after any code/Dockerfile change; plain `docker compose up` is enough (and faster) when nothing's changed since the last build.
+
+### Run without Docker (API on the host, Postgres in Docker)
+
+To run the API directly on the host with hot reload, start only Postgres in Docker, point `.env`'s `DATABASE_URL` at `localhost` instead of the `postgres` service hostname (e.g. `postgresql://postgres:postgres@localhost:5432/arrow_poc?schema=public`), then:
 
 ```powershell
-npm run start:dev   # watch mode (hot reload)
-npm test            # unit tests
-npm run test:e2e    # end-to-end tests
+docker compose up postgres -d   # Postgres only
+npx prisma migrate dev          # apply migrations
+npm run prisma:seed             # seed manual/remote levels (+ admin user if configured)
+npm run start:dev               # watch mode (hot reload)
 ```
 
 > **Note:** There is no `npm run dev` — the dev script is `start:dev`.
+
+See [Testing](#testing) below for the full test/lint/build command set.
 
 ---
 
@@ -238,7 +243,23 @@ Create a `.env` file from `.env.example`:
 
 The seed script (`prisma/seed.ts`) upserts by `Level.number`, ensuring stable `levelId`s the Flutter client maps to.
 
+`prisma/levels/remote-levels.ts` contains additional, real, playable levels reserved in the `number >= 1000` band (see [Backend-Driven Dynamic Levels](#backend-driven-dynamic-levels) below). `seedRemoteLevels()` runs right after the manual seed in `prisma/seed.ts`, upserting by `Level.number` with the same idempotent pattern — re-running `npx prisma db seed` never duplicates rows and never touches numbers 1–30.
+
 If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, the seed also creates or updates an admin user for testing admin-only endpoints via Swagger.
+
+---
+
+## Backend-Driven Dynamic Levels
+
+On top of the offline-first local levels (1–30, bundled with the Flutter client), the backend can serve additional, real, playable levels that the client downloads and merges at runtime — new content ships by seeding the database, with no app rebuild required.
+
+- **Number band**: remote-only levels reserve `number >= 1000` (`1000 + n` in creation order, never reused), keeping them unambiguously separate from the local 1–30 range. `Level.number` is `@unique`, enforcing this at the schema level.
+- **2D/3D discriminator**: the graph shape is the source of truth — any node with `z !== 0` makes a level 3D. `definitionJson.metadata.mode: "2d" | "3d"` is an additive hint for the client to route without scanning nodes first; if `mode` and the actual node `z` values ever disagree, the node data wins.
+- **No schema change**: `definitionJson: Json` already accepts arbitrary shape and `GraphLevelDefinitionValidator` already permits open `metadata`, so this is a pure data/seeding convention, not a migration.
+- **Read path**: the existing `GET /levels` (unauthenticated) already returns full `LevelEntity[]`; the client filters to `number >= 1000` before merging these into its list. No new endpoint was added.
+- **Client behaviour is entirely additive and offline-first**: local levels always load and are authoritative; the client fetches remote levels best-effort, appends any not already present locally (local wins on a number conflict), and caches the last successful fetch for offline replay. A backend outage never affects local gameplay.
+
+Full contract: [`docs/DYNAMIC_LEVELS_CONTRACT.md`](docs/DYNAMIC_LEVELS_CONTRACT.md).
 
 ---
 
