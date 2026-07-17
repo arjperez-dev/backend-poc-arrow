@@ -86,8 +86,9 @@ Each class has one reason to change.
 
 Classes are open for extension but closed for modification.
 
-- The scoring comparison logic lives in a standalone policy class (`LeaderboardScorePolicy`). If the ranking criteria change (e.g. add a `combo` tiebreaker), only the policy is edited — the use case, controller, and repository remain untouched.
+- [`RolesGuard`](src/interfaces/http/auth/roles.guard.ts) never names a route. It reads the roles a handler declared through NestJS's `Reflector`, so protecting a new endpoint means adding `@Roles(UserRole.ADMIN)` to it — the guard's own source is never edited. Behaviour extends to N endpoints while the enforcing class stays closed.
 - Adding a new feature (e.g. achievements) means adding new ports, use cases, and a NestJS module without modifying existing ones.
+- The scoring comparison logic lives in a standalone policy class (`LeaderboardScorePolicy`). Changing the ranking criteria (e.g. adding a `combo` tiebreaker) touches only that class — the use case, controller, and repository remain untouched. Note this is isolation rather than textbook OCP: [`SubmitLeaderboardScoreUseCase`](src/application/leaderboard/submit-leaderboard-score.use-case.ts) constructs the policy with `new`, so *substituting* a different policy at runtime would require editing the use case.
 
 ### L — Liskov Substitution Principle
 
@@ -100,7 +101,8 @@ Any implementation of a port can replace any other without breaking use cases.
 Ports are small and focused — no client is forced to implement methods it does not need.
 
 - Four separate repository interfaces exist: `UserRepository`, `LevelRepository`, `ProgressRepository`, `LeaderboardRepository` — each with only the methods its consumers require.
-- Two security ports exist: `PasswordHasher` (hash / compare) and `TokenService` (sign / verify), rather than a single "SecurityService" interface.
+- Two security ports exist: `PasswordHasher` (`hash` / `compare`) and `TokenService` (`sign`), rather than a single "SecurityService" interface.
+- `TokenService` deliberately exposes `sign` only, because signing is the sole token operation any use case performs ([`LoginUserUseCase`](src/application/auth/login-user.use-case.ts) must mint a token without knowing the algorithm). Verification is a transport concern that runs in [`JwtAuthGuard`](src/interfaces/http/auth/jwt-auth.guard.ts) before any use case is reached, so the guard injects `JwtService` directly rather than widening the port with a method no use case would call. The trade-off is that `@nestjs/jwt` is imported in two places (the guard and [`JwtTokenService`](src/infrastructure/security/jwt-token.service.ts)) instead of one.
 
 ### D — Dependency Inversion Principle
 
@@ -113,13 +115,18 @@ High-level modules depend on abstractions, not on low-level modules.
 
 ## Design Patterns (GoF)
 
+Patterns are a response to forces, not a checklist. The forces in this codebase were swappable persistence and cross-cutting concerns; no Abstract Factory or Observer appears because there is no second product family and no event fan-out to justify one.
+
 | Pattern | Category | Where | Purpose |
 |---|---|---|---|
-| **Repository** | Structural (Adapter) | `application/ports/*.repository.ts` → `infrastructure/repositories/prisma-*.repository.ts` | Adapts the Prisma ORM to the abstract ports defined by the application layer, decoupling persistence from business logic. |
-| **Strategy / Policy** | Behavioural | [`LeaderboardScorePolicy`](src/domain/leaderboard/leaderboard-score.policy.ts) | Encapsulates the best-score comparison algorithm (score → moves → time) so it can be swapped or extended independently of the use case. |
-| **Singleton** | Creational | `PrismaService` (NestJS default scope) | NestJS registers `PrismaService` as a singleton, ensuring a single database connection pool across all repositories. |
-| **Command** | Behavioural | `RegisterUserCommand`, `SubmitLeaderboardScoreData` | Input DTOs act as command objects, encapsulating all data required to execute a use case in a single immutable object. |
-| **Chain of Responsibility** | Behavioural | NestJS middleware pipeline: Guards → Interceptors → Controller → Filters | Each concern (auth, logging, exception handling) is a link in the chain. Adding a new concern means adding a new link, not modifying existing ones. |
+| **Repository** + **Adapter** | Structural | `application/ports/*.repository.ts` → `infrastructure/repositories/prisma-*.repository.ts` | Repository is Fowler (PoEAA) rather than GoF, but the Prisma classes are textbook Adapter: each translates Prisma row types into domain entities via a private `mapUser`/`mapLevel`/`mapEntry`, so no Prisma type escapes infrastructure. Calling Prisma straight from a use case would nail every use case to Postgres and make the in-memory e2e suite impossible. |
+| **Singleton** | Creational | `PrismaService` (NestJS default scope) | One `PrismaService` per application, so all four repositories share a single connection pool — Postgres connections are finite. Container-scoped, *not* the GoF private-constructor form, which is why it stays testable and can `$disconnect()` via `OnModuleDestroy`. |
+| **Factory Method** | Creational | [`auth.module.ts`](src/modules/auth.module.ts) — `JwtModule.registerAsync({ useFactory })` | The JWT secret is unknown at compile time and arrives from `ConfigService` at boot. A factory defers construction until config resolves; `new JwtService()` cannot express "build once the environment has loaded". The `useClass` token bindings in every module are the same family. |
+| **Builder** | Creational | [`main.ts`](src/main.ts) — `new DocumentBuilder().setTitle()…build()` | Fluent step-by-step construction of the OpenAPI config, terminated by `build()`. A telescoping constructor with five optional arguments would be unreadable. |
+| **Decorator** | Structural | [`roles.decorator.ts`](src/interfaces/http/auth/roles.decorator.ts), `@ApiProperty`/`@IsEmail` on DTOs | Annotation-style, not GoF's wrapper-object Decorator: `Roles()` attaches metadata via `SetMetadata`, adding responsibility to a handler without subclassing. The wrapper-object variant does occur at runtime — the interceptor wraps the handler's return stream. |
+| **Chain of Responsibility** | Behavioural | `ValidationPipe` → `JwtAuthGuard` → `RolesGuard` → interceptor → controller → filter | Each link handles its concern and either passes control on or terminates the request — a failing `JwtAuthGuard` stops the chain before `RolesGuard` runs. Adding a rate limiter means inserting a link, not editing existing ones. |
+| **Policy object** *(partial Strategy)* | Behavioural | [`LeaderboardScorePolicy`](src/domain/leaderboard/leaderboard-score.policy.ts) | Encapsulates the best-score comparison (score → moves → time) in its own framework-free class. Only half of Strategy: there is no `ScorePolicy` interface and the use case does `new LeaderboardScorePolicy()`, so the algorithm cannot be substituted at runtime. |
+| **Command object** *(partial)* | Behavioural | `RegisterUserCommand`, `LoginUserCommand`, `SubmitLeaderboardScoreData` | Package a request's parameters into one object — the data half of Command, in the CQRS sense. Not full GoF Command: these are plain types with no `execute()`, no invoker, and no undo; the `execute()` lives on the use case. |
 
 ---
 
@@ -224,7 +231,12 @@ Create a `.env` file from `.env.example`:
 
 ## Seed Data
 
-`prisma/levels/manual-levels.ts` contains deterministic, hand-authored, graph-based manual levels. The seed script (`prisma/seed.ts`) upserts them by `Level.number`, ensuring stable `levelId`s the Flutter client maps to.
+`prisma/levels/manual-levels.ts` seeds 30 rows, and the two halves are not alike:
+
+- **1–15** are deterministic, hand-authored, graph-based levels, built from a `LevelSpec` through the shared `buildLevel()` grid builder.
+- **16–30** are *generated placeholders*, not real boards. Their authoritative playable definitions live in the frontend's local assets (`manual_levels_2d.json` / `manual_levels_3d.json`) and are never rendered from the backend. These rows exist only so every local level number resolves to a backend `Level.id` — progress and leaderboard flows map number → id via `GET /levels`, and without a row the lookup returns null, which previously left every 3D level's leaderboard permanently empty.
+
+The seed script (`prisma/seed.ts`) upserts by `Level.number`, ensuring stable `levelId`s the Flutter client maps to.
 
 If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, the seed also creates or updates an admin user for testing admin-only endpoints via Swagger.
 
@@ -234,12 +246,14 @@ If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, the seed also creates or upd
 
 ```powershell
 npm run lint         # static analysis
-npm run test         # unit tests (Jest)
-npm run test:e2e     # integration tests (Supertest)
+npm run test         # unit tests (Jest) — 12 tests / 5 suites
+npm run test:e2e     # HTTP tests over in-memory repositories (Supertest) — 10 tests / 2 suites
 npm run build        # verify production build
 ```
 
-Current e2e tests use in-memory repositories (Liskov Substitution in action) to avoid destructive operations against the development database.
+The e2e suite substitutes in-memory repositories for the Prisma ones (Liskov Substitution in action) — the real use cases, controllers, guards, interceptor, and filter all run, only persistence is swapped. This avoids destructive operations against the development database.
+
+They are best described as **full-stack HTTP tests**, not integration tests: no test executes a Prisma query. What they do verify is routing, `ValidationPipe` rejecting a malformed graph with a 400, `JwtAuthGuard` returning 401 on a missing token, `RolesGuard` returning 403 for a PLAYER and 201 for an ADMIN on `POST /levels`, the exception filter's error shape, and the 204 on progress reset. What they do **not** cover is the SQL boundary: no test exercises the Prisma repositories, so the `map*()` mappings, compound-unique upserts, cascade deletes, and the `orderBy` driving leaderboard ranking are unverified. `.env.example` reserves `DATABASE_URL_TEST` on port 5433 for a future database-backed suite.
 
 ---
 
