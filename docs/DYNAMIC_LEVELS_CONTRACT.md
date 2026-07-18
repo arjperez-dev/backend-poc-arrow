@@ -27,6 +27,18 @@ offline-first local levels (1–30). No schema migration was made; see
   (`'manual' | 'figure' | '3d'`), which are a separate, already-existing
   concept scoped to local asset authoring only.
 
+> **Hex levels (31–40, Phase 37) are out of scope for this discriminator.**
+> Unlike 2D/3D, hex boards cannot be told apart from square boards by graph
+> shape alone (both use the same integer lattice), so the frontend reads
+> `metadata.topology: "square" | "hex"` directly instead of inferring it (see
+> `frontend-poc-arrow/docs/LEVEL_AUTHORING.md` §18). This backend does not
+> serve real hex `definitionJson` — Phase 38 seeded placeholder `Level` rows
+> for 31–40 purely so `GET /levels` can resolve a `levelId` for them; the
+> placeholder rows are square and carry no `metadata.topology`. If the
+> backend is ever extended to serve real remote hex levels, the `mode`
+> read-contract above must be extended to a `topology` field read the same
+> way, not folded into the 2D/3D `mode` hint.
+
 ## 2. Level-number namespace for remote-only levels
 
 - Local gameplay levels occupy **1–30** (`manual_levels_2d.json` 1–20,
