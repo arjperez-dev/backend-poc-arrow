@@ -264,6 +264,11 @@ Current e2e tests use in-memory repositories (Liskov Substitution in action) to 
 
 ---
 
+## Documentation
+
+- [`docs/CODEX_HANDOFF.md`](docs/CODEX_HANDOFF.md) — authoritative project state and phase history
+- [`docs/DYNAMIC_LEVELS_CONTRACT.md`](docs/DYNAMIC_LEVELS_CONTRACT.md) — contract defining how the backend serves dynamic 2D/3D levels to the frontend
+
 ## AI Usage
 
 AI-assisted development is documented in [`AI_USAGE.md`](AI_USAGE.md). Each entry records the date, tool/model, task, prompt, result, team modifications, lessons learned, and critical reflection.
