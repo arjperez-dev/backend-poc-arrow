@@ -229,9 +229,9 @@ Create a `.env` file from `.env.example`:
 
 ## Seed Data
 
-`prisma/levels/manual-levels.ts` contains deterministic, hand-authored, graph-based manual levels. The seed script (`prisma/seed.ts`) upserts them by `Level.number`, ensuring stable `levelId`s the Flutter client maps to.
+`prisma/levels/manual-levels.ts` contains deterministic, hand-authored, graph-based manual levels for numbers **1–40**: real playable definitions for 1–15, and minimal placeholder rows for 16–40 (their real, playable definitions live only in the Flutter client's local assets — see below). Placeholder `difficulty` for 31–40 mirrors each level's entry in `manual_levels_hex.json` for display purposes; the placeholder `definitionJson` itself is a square board and is never rendered. The seed script (`prisma/seed.ts`) upserts them by `Level.number`, ensuring stable `levelId`s the Flutter client maps to.
 
-`prisma/levels/remote-levels.ts` contains additional, real, playable levels reserved in the `number >= 1000` band (see [Backend-Driven Dynamic Levels](#backend-driven-dynamic-levels) below). `seedRemoteLevels()` runs right after the manual seed in `prisma/seed.ts`, upserting by `Level.number` with the same idempotent pattern — re-running `npx prisma db seed` never duplicates rows and never touches numbers 1–30.
+`prisma/levels/remote-levels.ts` contains additional, real, playable levels reserved in the `number >= 1000` band (see [Backend-Driven Dynamic Levels](#backend-driven-dynamic-levels) below). `seedRemoteLevels()` runs right after the manual seed in `prisma/seed.ts`, upserting by `Level.number` with the same idempotent pattern — re-running `npx prisma db seed` never duplicates rows and never touches numbers 1–40.
 
 If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, the seed also creates or updates an admin user for testing admin-only endpoints via Swagger.
 
@@ -239,7 +239,7 @@ If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, the seed also creates or upd
 
 ## Backend-Driven Dynamic Levels
 
-On top of the offline-first local levels (1–30, bundled with the Flutter client), the backend can serve additional, real, playable levels that the client downloads and merges at runtime — new content ships by seeding the database, with no app rebuild required.
+On top of the offline-first local levels (1–40 backed by a `Level` row here — 1–15 real, 16–40 placeholder rows whose real, playable definitions live only in the Flutter client's local assets), the backend can serve additional, real, playable levels that the client downloads and merges at runtime — new content ships by seeding the database, with no app rebuild required.
 
 - **Number band**: remote-only levels reserve `number >= 1000` (`1000 + n` in creation order, never reused), keeping them unambiguously separate from the local 1–30 range. `Level.number` is `@unique`, enforcing this at the schema level.
 - **2D/3D discriminator**: the graph shape is the source of truth — any node with `z !== 0` makes a level 3D. `definitionJson.metadata.mode: "2d" | "3d"` is an additive hint for the client to route without scanning nodes first; if `mode` and the actual node `z` values ever disagree, the node data wins.

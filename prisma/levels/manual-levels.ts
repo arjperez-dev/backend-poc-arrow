@@ -397,6 +397,38 @@ const levelSpecs: LevelSpec[] = [
       maxMoves: 40,
     };
   }),
+  // Levels 31-40 are hexagonal (axial-coordinate) levels whose authoritative,
+  // playable definitions live in the frontend's local asset
+  // (`manual_levels_hex.json`) and are never rendered from the backend (see
+  // the comment above 16-30 for why this row-per-number pattern exists).
+  // `difficulty` mirrors each level's `manual_levels_hex.json` metadata for
+  // display purposes only; the square `definitionJson` placeholder below is
+  // not the real board and is intentionally not used for gameplay.
+  ...([
+    'easy',
+    'easy',
+    'easy',
+    'medium',
+    'medium',
+    'medium',
+    'medium',
+    'hard',
+    'hard',
+    'hard',
+  ] as const).map((difficulty, index): LevelSpec => {
+    const number = 31 + index;
+    return {
+      number,
+      name: `Level ${number}`,
+      difficulty,
+      width: 3,
+      height: 3,
+      arrows: [{ id: 'a1', nodes: ['n0_0', 'n1_0'], direction: 'right' }],
+      blockedEdges: [],
+      timeLimit: 90,
+      maxMoves: 40,
+    };
+  }),
 ];
 
 export const manualLevels: ManualLevelSeed[] = levelSpecs.map(buildLevel);
